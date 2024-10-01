@@ -32,7 +32,7 @@ public:
 	class USpringArmComponent* springArmComp;
 
 	// 카메라 컴포넌트
-	UPROPERTY(VisibleAnywhere, Category = Camera)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera)
 	class UCameraComponent* tpsCamComp;
 
 	// 입력 관련 속성
@@ -46,6 +46,14 @@ public:
 	class UInputAction* ia_Move;
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	class UInputAction* ia_Jump;
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	class UInputAction* ia_Fire;
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	class UInputAction* ia_GrenadeGun;
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	class UInputAction* ia_SniperGun;
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	class UInputAction* ia_Sniper;
 
 	// 좌우 회전 입력 처리
 	void Turn(const struct FInputActionValue& inputValue);
@@ -66,4 +74,50 @@ public:
 	void InputJump(const struct FInputActionValue& inputValue);
 
 	void PlayerMove();
+
+	// 총 스켈레탈메시
+	UPROPERTY(VisibleAnywhere, Category = GunMesh)
+	class USkeletalMeshComponent* gunMeshComp;
+
+	// 총알 공장
+	UPROPERTY(EditDefaultsOnly, Category = BulletFactory)
+	TSubclassOf<class ABullet> bulletFactory;
+
+	// 총알 발사 처리함수
+	void InputFire(const struct FInputActionValue& inputValue);
+
+	// 스나이퍼건 스태틱메시
+	UPROPERTY(VisibleAnywhere, Category = GunMesh)
+	class UStaticMeshComponent* sniperGunComp;
+
+	// 유탄총 사용중인지 여부
+	bool bUsingGrenadeGun = true;
+	// 유탄총 변경
+	void ChangeToGrenadeGun(const struct FInputActionValue& inputValue);
+	// 스나이퍼건 변경
+	void ChangeToSniperGun(const struct FInputActionValue& inputValue);
+
+	// 스나이퍼 조준처리함수
+	void SniperAim(const struct FInputActionValue& inputValue);
+	// 스나이퍼 조준 여부
+	bool bSniperAim = false;
+
+	// 스나이퍼 UI 위젯 공장
+	UPROPERTY(EditDefaultsOnly, Category = SniperUI)
+	TSubclassOf<class UUserWidget> sniperUIFactory;
+	// 스나이퍼 UI 위젯 인스턴스
+	UPROPERTY()
+	class UUserWidget* _sniperUI;
+
+	// 총알 파편 효과 공장
+	UPROPERTY(EditAnywhere, Category = BulletEffect)
+	class UParticleSystem* bulletEffectFactory;
+
+	// 일반 조준 크로스헤어UI 위젯
+	UPROPERTY(EditDefaultsOnly, Category = SniperUI)
+	TSubclassOf<class UUserWidget> crosshairUIFactory;
+
+	// 크로스헤어 인스턴스
+	UPROPERTY()
+	class UUserWidget* _crosshairUI;
 };
