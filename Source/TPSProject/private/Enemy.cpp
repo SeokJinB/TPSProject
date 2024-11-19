@@ -11,7 +11,7 @@ AEnemy::AEnemy()
 	PrimaryActorTick.bCanEverTick = true;
 
 	// 1. 스켈레탈 메시 데이터 로드
-	ConstructorHelpers::FObjectFinder<USkeletalMesh> tempMesh(TEXT("SkeletalMesh'/Game/Characters/Mannequin_UE4/Meshes/SK_Mannequin.SK_Mannequin'"));
+	ConstructorHelpers::FObjectFinder<USkeletalMesh> tempMesh(TEXT("SkeletalMesh'/Game/Enemy/Model/vampire_a_lusth.vampire_a_lusth'"));
 	
 	if (tempMesh.Succeeded())
 	{
@@ -19,10 +19,22 @@ AEnemy::AEnemy()
 		GetMesh()->SetSkeletalMesh(tempMesh.Object);
 		// 1-2. 메시 위치 및 회전 설정
 		GetMesh()->SetRelativeLocationAndRotation(FVector(0, 0, -88), FRotator(0, -90, 0));
+		// 1-4. 메시 크기 수정
+		GetMesh()->SetRelativeScale3D(FVector(0.84f));
 	}
 
 	// EnemyFSM 컴포넌트 추가
 	fsm = CreateDefaultSubobject<UEnemyFSM>(TEXT("FSM"));
+
+	// 애니메이션 블루프린트 할당
+	ConstructorHelpers::FClassFinder<UAnimInstance> tempClass(TEXT("AnimBlueprint'/Game/Bluprints/ABP_Enemy.ABP_Enemy'"));
+	if (tempClass.Succeeded())
+	{
+		GetMesh()->SetAnimInstanceClass(tempClass.Class);
+	}
+
+	// 월드 배치 및 스폰 시 자동으로 AIController부터 Possess될 수 있도록 설정
+	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 }
 
 // Called when the game starts or when spawned

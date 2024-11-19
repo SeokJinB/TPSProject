@@ -54,6 +54,8 @@ public:
 	class UInputAction* ia_SniperGun;
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	class UInputAction* ia_Sniper;
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	class UInputAction* ia_Run;
 
 	// 좌우 회전 입력 처리
 	void Turn(const struct FInputActionValue& inputValue);
@@ -64,7 +66,10 @@ public:
 
 	// 이동 속도
 	UPROPERTY(EditAnywhere, Category = PlayerSetting)
-	float walkSpeed = 600;
+	float walkSpeed = 200;
+	// 달리기 속도
+	UPROPERTY(EditAnywhere, Category = PlayerSetting)
+	float runSpeed = 600;
 	
 	// 이동 방향
 	FVector direction;
@@ -120,4 +125,15 @@ public:
 	// 크로스헤어 인스턴스
 	UPROPERTY()
 	class UUserWidget* _crosshairUI;
+
+	// 달리기 이벤트 처리함수
+	void InputRun();
+
+	// 카메라 흔들림 블루프린트 저장 변수
+	UPROPERTY(EditDefaultsOnly, Category = CameraMotion)
+	TSubclassOf<class UCameraShakeBase> cameraShake;
+
+	// 총알 발사 사운드
+	UPROPERTY(EditDefaultsOnly, Category = Sound)
+	class USoundBase* bulletSound;
 };

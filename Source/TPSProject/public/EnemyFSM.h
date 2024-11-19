@@ -65,11 +65,11 @@ public:
 
 	// 공격 범위
 	UPROPERTY(EditAnywhere, Category = FSM)
-	float attackRange = 150.0f;
+	float attackRange = 200.0f;
 
 	// 공격 대기 시간
 	UPROPERTY(EditAnywhere, Category = FSM)
-	float attackDelayTime = 2.0f;
+	float attackDelayTime = 2.5f;
 
 	// 피격 알림 이벤트 함수
 	void OnDamageProcess();
@@ -80,9 +80,23 @@ public:
 
 	// 피격 대기 시간
 	UPROPERTY(EditAnywhere, Category = FSM)
-	float damageDelayTime = 2.0f;
+	float damageDelayTime = 0.5f;
 
 	// 아래로 사라지는 속도
 	UPROPERTY(EditAnywhere, Category = FSM)
 	float dieSpeed = 50.0f;
+
+	// 사용 중인 애니메이션 블루프린트
+	UPROPERTY()
+	class UEnemyAnim* anim;
+
+	// Enemy를 소유하고 있는 AIController
+	UPROPERTY()
+	class AAIController* ai;
+
+	// 길 찾기 수행 시 랜덤 위치
+	FVector randomPos;
+
+	// 랜덤 위치
+	bool GetRandomPositionInNavMesh(FVector centerLocation, float radius, FVector& dest);
 };

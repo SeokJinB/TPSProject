@@ -7,6 +7,10 @@
 #include "Kismet/GameplayStatics.h"
 #include "TPSProject.h"
 #include <Components/CapsuleComponent.h>
+#include "EnemyAnim.h"
+#include "AIController.h"
+#include <NavigationSystem.h>
+#include "Navigation/PathFollowingComponent.h"
 
 // Sets default values for this component's properties
 UEnemyFSM::UEnemyFSM()
@@ -33,6 +37,11 @@ void UEnemyFSM::BeginPlay()
 	// 소유 객체 가져오기
 	me = Cast<AEnemy>(GetOwner());
 	
+	// UEnemyAnim* 할당
+	anim = Cast<UEnemyAnim>(me->GetMesh()->GetAnimInstance());
+
+	// AAIController 할당
+	ai = Cast<AAIController>(me->GetController());
 }
 
 
@@ -60,6 +69,21 @@ void UEnemyFSM::TickComponent(float DeltaTime, ELevelTick TickType, FActorCompon
 	}
 }
 
+// 랜덤 위치 가져오기
+bool UEnemyFSM::GetRandomPositionInNavMesh(FVector centerLocation, float radius, FVector& dest)
+{
+	// 네비게이션 시스템 인스턴스 가져오기
+	auto ns = UNavigationSystemV1::GetNavigationSystem(GetWorld());
+
+	FNavLocation loc;
+
+	// loc에 기준 위치(centerLocation)와 검색 범위(radius)를 전달
+	bool result = ns->GetRandomReachablePointInRadius(centerLocation, radius, loc);
+	dest = loc.Location;
+
+	return result;
+}
+
 void UEnemyFSM::IdleState()
 {
 	// 1. 시간이 흐름
@@ -71,6 +95,11 @@ void UEnemyFSM::IdleState()
 		mState = EEnemyState::Move;
 		// 4. 경과 시간 초기화
 		currentTime = 0;
+		// 5. 애니메이션 상태 동기화
+		anim->animState = mState;
+
+		// 최초 랜덤 위치 설정
+		GetRandomPositionInNavMesh(me->GetActorLocation(), 500, randomPos);
 	}
 }
 
@@ -81,12 +110,48 @@ void UEnemyFSM::MoveState()
 	// 2. 방향
 	FVector dir = destination - me->GetActorLocation();
 	// 3. 이동
-	me->AddMovementInput(dir.GetSafeNormal());
+	// 3-1. Navigation 객체 가져오기
+	auto ns = UNavigationSystemV1::GetNavigationSystem(GetWorld());
+
+	// 3-2. 목적지 길 찾기 경로 데이터 검색
+	FPathFindingQuery query;
+	FAIMoveRequest req;
+	req.SetAcceptanceRadius(3);
+	req.SetGoalLocation(destination);
+
+	// 3-3. 길 찾기를 위한 쿼리 생성 및 길 찾기 결과
+	ai->BuildPathfindingQuery(req, query);
+	FPathFindingResult r = ns->FindPathSync(query);
+
+	// 목적지까지의 길 찾기 성공 여부
+	if (r.Result == ENavigationQueryResult::Success)
+	{
+		ai->MoveToLocation(destination);
+	}
+	else
+	{
+		auto result = ai->MoveToLocation(randomPos);
+
+		if (result == EPathFollowingRequestResult::AlreadyAtGoal)
+		{
+			GetRandomPositionInNavMesh(me->GetActorLocation(), 500, randomPos);
+		}
+	}
 
 	// 타깃과 가까워지면 공격 상태로 전환
 	if (dir.Size() < attackRange)
 	{
+		// 길 찾기 기능 정지
+		ai->StopMovement();
+
 		mState = EEnemyState::Attack;
+
+		// 애니메이션 상태 동기화
+		anim->animState = mState;
+		// 공격 애니메이션 재생 활성화
+		anim->bAttackPlay = true;
+		// 공격 상태 전환 시 대기 시간이 바로 끝나도록 처리
+		currentTime = attackDelayTime;
 	}
 }
 
@@ -101,6 +166,8 @@ void UEnemyFSM::AttackState()
 		PRINT_LOG(TEXT("Attack"));
 		// 4. 경과 시간 초기화
 		currentTime = 0;
+
+		anim->bAttackPlay = true;
 	}
 
 	// 타깃과의 거리
@@ -111,6 +178,12 @@ void UEnemyFSM::AttackState()
 	{
 		// 6. 상태를 이동으로 전환
 		mState = EEnemyState::Move;
+
+		// 7. 애니메이션 상태 동기화
+		anim->animState = mState;
+
+		// 8. 적 정찰
+		GetRandomPositionInNavMesh(me->GetActorLocation(), 500, randomPos);
 	}
 }
 
@@ -123,6 +196,13 @@ void UEnemyFSM::OnDamageProcess()
 	{
 		// 체력이 남아있다면 피격 상태
 		mState = EEnemyState::Damage;
+
+		currentTime = 0;
+
+		// 피격 애니메이션 재생
+		int32 index = FMath::RandRange(0, 1);
+		FString sectionName = FString::Printf(TEXT("Damage%d"), index);
+		anim->PlayDamageAnim(FName(*sectionName));
 	}
 	else
 	{
@@ -131,7 +211,14 @@ void UEnemyFSM::OnDamageProcess()
 
 		// 캡슐 충돌체 비활성화
 		me->GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+		// 죽음 애니메이션 재생
+		anim->PlayDamageAnim(TEXT("Die"));
 	}
+
+	// 애니메이션 상태 동기화
+	anim->animState = mState;
+	ai->StopMovement();
 }
 
 void UEnemyFSM::DamageState()
@@ -145,11 +232,19 @@ void UEnemyFSM::DamageState()
 		mState = EEnemyState::Idle;
 		// 4. 경과 시간 초기화
 		currentTime = 0;
+		// 5. 애니메이션 상태 동기화
+		anim->animState = mState;
 	}
 }
 
 void UEnemyFSM::DieState()
 {
+	// 죽음 애니메이션이 끝나지 않았다면 바닥으로 내려가지 않음
+	if (anim->bDieDone == false)
+	{
+		return;
+	}
+
 	// 아래로 내려감
 	FVector P0 = me->GetActorLocation();
 	FVector vt = FVector::DownVector * dieSpeed * GetWorld()->DeltaTimeSeconds;

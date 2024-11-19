@@ -11,6 +11,8 @@
 #include <Blueprint/UserWidget.h>
 #include <Kismet/GameplayStatics.h>
 #include "EnemyFSM.h"
+#include <GameFramework/CharacterMovementComponent.h>
+#include "PlayerAnim.h"
 
 // Sets default values
 ATPSPlayer::ATPSPlayer()
@@ -20,7 +22,7 @@ ATPSPlayer::ATPSPlayer()
 
 	// 1. 스켈레탈메시 데이터를 불러오기
 	ConstructorHelpers::FObjectFinder<USkeletalMesh>
-	TempMesh(TEXT("SkeletalMesh'/Game/Characters/Mannequin_UE4/Meshes/SK_Mannequin.SK_Mannequin'"));
+	TempMesh(TEXT("SkeletalMesh'/Game/AnimStarterPack/UE4_Mannequin/Mesh/SK_Mannequin.SK_Mannequin'"));
 
 	if (TempMesh.Succeeded())
 	{
@@ -52,7 +54,7 @@ ATPSPlayer::ATPSPlayer()
 	// 4. 총 스켈레탈메시 컴포넌트 등록
 	gunMeshComp = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("GunMeshComp"));
 	// 4-1. 부모 컴포넌트를 Mesh 컴포넌트로 설정
-	gunMeshComp->SetupAttachment(GetMesh());
+	gunMeshComp->SetupAttachment(GetMesh(), TEXT("hand_rSocket"));
 	// 4-2. 스켈레탈메시 데이터 로드
 	ConstructorHelpers::FObjectFinder<USkeletalMesh> TempGunMesh(TEXT("SkeletalMesh'/Game/FPWeapon/Mesh/SK_FPGun.SK_FPGun'"));
 	
@@ -61,13 +63,14 @@ ATPSPlayer::ATPSPlayer()
 		// 4-4. 스켈레탈메시 데이터 할당
 		gunMeshComp->SetSkeletalMesh(TempGunMesh.Object);
 		// 4-5. 위치 조정
-		gunMeshComp->SetRelativeLocation(FVector(-14, 52, 120));
+		gunMeshComp->SetRelativeLocation(FVector(-17, 10, -3));
+		gunMeshComp->SetRelativeRotation(FRotator(0, 90, 0));
 	}
 
 	// 5. 스나이퍼 건 컴포넌트 등록
 	sniperGunComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SniperGunComp"));
 	// 5-1. 부모 컴포넌트를 Mesh 컴포넌트로 설정
-	sniperGunComp->SetupAttachment(GetMesh());
+	sniperGunComp->SetupAttachment(GetMesh(), TEXT("hand_rSocket"));
 	// 5-2. 스태틱메시 데이터 로드
 	ConstructorHelpers::FObjectFinder<UStaticMesh> TempSniperMesh(TEXT("StaticMesh'/Game/SniperGun/sniper1.sniper1'"));
 	// 5-3. 데이터 로드가 성공하면
@@ -76,9 +79,18 @@ ATPSPlayer::ATPSPlayer()
 		// 스태틱메시 데이터 할당
 		sniperGunComp->SetStaticMesh(TempSniperMesh.Object);
 		// 위치 조정
-		sniperGunComp->SetRelativeLocation(FVector(-22, 55, 120));
+		sniperGunComp->SetRelativeLocation(FVector(-42, 7, 1));
+		sniperGunComp->SetRelativeRotation(FRotator(0, 90, 0));
 		// 크기 조정
 		sniperGunComp->SetRelativeScale3D(FVector(0.15f));
+	}
+
+	// 총알 사운드 로드
+	ConstructorHelpers::FObjectFinder<USoundBase> tempSound(TEXT("SoundWave'/Game/SniperGun/Rifle.Rifle'"));
+
+	if (tempSound.Succeeded())
+	{
+		bulletSound = tempSound.Object;
 	}
 }
 
@@ -86,6 +98,9 @@ ATPSPlayer::ATPSPlayer()
 void ATPSPlayer::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 초기 속도를 걷기로 설정
+	GetCharacterMovement()->MaxWalkSpeed = walkSpeed;
 	
 	auto pc = Cast<APlayerController>(Controller);
 	if (pc)
@@ -126,13 +141,6 @@ void ATPSPlayer::PlayerMove()
 {
 	// 플레이어 이동처리
 	direction = FTransform(GetControlRotation()).TransformVector(direction);
-
-	// 실제 등속 운동 코드
-	/*FVector P0 = GetActorLocation();
-	FVector vt = direction * walkSpeed * DeltaTime;
-	FVector P = P0 + vt;
-	SetActorLocation(P);*/
-
 	AddMovementInput(direction);
 	direction = FVector::ZeroVector;
 }
@@ -154,6 +162,8 @@ void ATPSPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent
 		PlayerInput->BindAction(ia_SniperGun, ETriggerEvent::Started, this, &ATPSPlayer::ChangeToSniperGun);
 		PlayerInput->BindAction(ia_Sniper, ETriggerEvent::Started, this, &ATPSPlayer::SniperAim);
 		PlayerInput->BindAction(ia_Sniper, ETriggerEvent::Completed, this, &ATPSPlayer::SniperAim);
+		PlayerInput->BindAction(ia_Run, ETriggerEvent::Started, this, &ATPSPlayer::InputRun);
+		PlayerInput->BindAction(ia_Run, ETriggerEvent::Completed, this, &ATPSPlayer::InputRun);
 	}
 }
 
@@ -186,6 +196,17 @@ void ATPSPlayer::InputJump(const FInputActionValue& inputValue)
 
 void ATPSPlayer::InputFire(const FInputActionValue& inputValue)
 {
+	// 총알 발사 사운드 재생
+	UGameplayStatics::PlaySound2D(GetWorld(), bulletSound);
+
+	// 카메라 흔들림 재생
+	auto controller = GetWorld()->GetFirstPlayerController();
+	controller->PlayerCameraManager->StartCameraShake(cameraShake);
+
+	// 공격 애니메이션 재생
+	auto anim = Cast<UPlayerAnim>(GetMesh()->GetAnimInstance());
+	anim->PlayAttackAnim();
+
 	if(bUsingGrenadeGun)
 	{
 		// 총알 발사 처리
@@ -283,5 +304,20 @@ void ATPSPlayer::SniperAim(const FInputActionValue& inputValue)
 		tpsCamComp->SetFieldOfView(90.0f);
 		// 4. 일반 조준 UI 등록
 		_crosshairUI->AddToViewport();
+	}
+}
+
+void ATPSPlayer::InputRun()
+{
+	auto movement = GetCharacterMovement();
+	
+	// 현재 달리기 모드라면
+	if (movement->MaxWalkSpeed > walkSpeed)
+	{
+		movement->MaxWalkSpeed = walkSpeed;
+	}
+	else
+	{
+		movement->MaxWalkSpeed = runSpeed;
 	}
 }
